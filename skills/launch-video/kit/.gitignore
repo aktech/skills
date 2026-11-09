@@ -1,0 +1,7 @@
+node_modules/
+frames/
+out/
+app-snapshot/
+assets/music/*.mp3
+assets/sfx/*.mp3
+assets/sfx/*.wav

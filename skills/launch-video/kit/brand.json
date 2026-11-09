@@ -1,0 +1,31 @@
+{
+  "name": "Acme",
+  "wordmark": { "text": "Acme", "size": 120, "weight": 600 },
+  "mark": {
+    "path": "M22 0H78A22 22 0 0 1 100 22V78A22 22 0 0 1 78 100H22A22 22 0 0 1 0 78V22A22 22 0 0 1 22 0ZM50 26A24 24 0 1 0 50 74A24 24 0 1 0 50 26Z"
+  },
+  "font": {
+    "family": "Fira Sans",
+    "files": {
+      "400": "assets/fonts/FiraSans-Regular.woff2",
+      "500": "assets/fonts/FiraSans-Medium.woff2",
+      "600": "assets/fonts/FiraSans-SemiBold.woff2"
+    }
+  },
+  "windowUrl": "app.example.com",
+  "colours": {
+    "paper": "#f5f5f3",
+    "ink": "#23221d",
+    "muted": "#8b8a84",
+    "night": "#111009",
+    "moon": "#ebebe8",
+    "accent": "#e8613c",
+    "highlight": "#3d63dd"
+  },
+  "credit": {
+    "line": "From the team that brought you",
+    "makers": [{ "text": "Example Project" }, { "text": "Example Co" }],
+    "joiner": "at",
+    "url": "acme.example.com"
+  }
+}

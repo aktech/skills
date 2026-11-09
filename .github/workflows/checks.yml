@@ -1,0 +1,23 @@
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Skills are valid and contain nothing personal
+        run: python3 .github/scripts/check_skills.py
+      - name: Shell scripts
+        run: find skills -name '*.sh' -print0 | xargs -0 shellcheck --severity=warning
+      - name: JavaScript parses
+        run: find skills -name '*.mjs' -o -name '*.js' | grep -v node_modules | xargs -n1 node --check
+      - name: Python parses
+        run: find skills -name '*.py' -print0 | xargs -0 python3 -m py_compile

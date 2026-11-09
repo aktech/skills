@@ -1,0 +1,27 @@
+name: Render
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mermaid:
+    name: Hand-drawn Mermaid diagram
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Render the example
+        working-directory: skills/drawing-handdrawn-mermaid-diagrams
+        run: python3 render.py example.mmd "$RUNNER_TEMP/example.png" 1400
+      - name: The PNG is a real image
+        run: file "$RUNNER_TEMP/example.png" | grep -q 'PNG image data'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mermaid-example
+          path: ${{ runner.temp }}/example.png
+

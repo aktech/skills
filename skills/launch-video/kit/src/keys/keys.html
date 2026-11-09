@@ -1,0 +1,128 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>keys</title>
+<script>
+// Keyboard sounds for the typing on camera, cut from a real recording of a Mac keyboard
+// (assets/sfx/keyboard.mp3). window.render(presses, len, mp3) finds the single
+// key presses in the recording, keeps the clean ones, evens out their loudness, and places
+// one for every { t, key } (video seconds). Returns { sr, left, right, info }.
+const SR = 48000
+const PRE = 0.004          // kept before each detected onset (the very start of the click)
+const MIN_LEN = 0.12, MAX_LEN = 0.25, FADE = 0.025
+
+let seed = 5
+const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+
+// Onsets: 2 ms frames of high-passed energy; an onset is a frame much louder than the 20 ms
+// before it, above an absolute floor, at least 60 ms after the previous onset.
+function onsets(x, sr) {
+  const hop = Math.round(sr * 0.002)
+  const e = []
+  for (let i = 0; i + hop < x.length; i += hop) {
+    let s = 0
+    for (let j = i + 1; j < i + hop; j++) { const d = x[j] - x[j - 1]; s += d * d }
+    e.push(Math.sqrt(s / hop))
+  }
+  const sorted = [...e].sort((a, b) => a - b)
+  const floor = sorted[Math.floor(sorted.length * 0.5)] * 6
+  const out = []
+  for (let i = 10; i < e.length; i++) {
+    let before = 0
+    for (let j = i - 10; j < i; j++) before = Math.max(before, e[j])
+    if (e[i] > floor && e[i] > before * 4 && (!out.length || i * hop - out[out.length - 1].at > sr * 0.06))
+      out.push({ at: i * hop, frame: i })
+  }
+  return { out, e, hop }
+}
+
+function rms(x, a, b) { let s = 0; for (let i = a; i < b; i++) s += x[i] * x[i]; return Math.sqrt(s / Math.max(1, b - a)) }
+
+// Share of a press's energy under ~600 Hz: the heavier, lower ones are the big keys.
+function lowShare(x, a, b, sr) {
+  const k = Math.exp(-2 * Math.PI * 600 / sr)
+  let lp = 0, lo = 0, all = 0
+  for (let i = a; i < b; i++) { lp = (1 - k) * x[i] + k * lp; lo += lp * lp; all += x[i] * x[i] }
+  return lo / Math.max(1e-12, all)
+}
+
+window.render = async function (presses, len, mp3b64) {
+  const bytes = Uint8Array.from(atob(mp3b64), (c) => c.charCodeAt(0))
+  const rec = await new OfflineAudioContext(1, SR, SR).decodeAudioData(bytes.buffer)
+  const x = rec.getChannelData(0), sr = rec.sampleRate
+
+  // ---- cut clean single presses ----
+  const { out: on, e, hop } = onsets(x, sr)
+  const cuts = []
+  for (let n = 0; n < on.length; n++) {
+    const start = on[n].at - Math.round(PRE * sr)
+    const next = n + 1 < on.length ? on[n + 1].at : x.length
+    const prev = n > 0 ? on[n - 1].at : -Infinity
+    const room = (next - start) / sr - 0.012
+    if (room < MIN_LEN) continue                                  // the next press comes too soon
+    if ((on[n].at - prev) / sr < 0.09) continue                   // still ringing from the previous one
+    const end = start + Math.round(Math.min(MAX_LEN, room) * sr)
+    // The press peaks in its first 15 ms. Later in the cut nothing may come close to that
+    // peak (a natural release is much quieter), and the 18 ms before it must be quiet.
+    const f0 = on[n].frame, f15 = f0 + Math.round(0.015 * sr / hop)
+    let peak = 0; for (let f = f0; f < f15; f++) peak = Math.max(peak, e[f] || 0)
+    let later = 0; for (let f = f15 + Math.round(0.02 * sr / hop); f < end / hop; f++) later = Math.max(later, e[f] || 0)
+    let quiet = 0; for (let f = f0 - 10; f < f0 - 1; f++) quiet = Math.max(quiet, e[f] || 0)
+    if (later > peak * 0.55 || quiet > peak * 0.12) continue        // a double, or smudged
+    cuts.push({ start, end, clean: quiet / peak, low: lowShare(x, start, start + Math.round(0.06 * sr), sr), loud: rms(x, start, start + Math.round(0.03 * sr)) })
+  }
+  // Keep the cleanest, at most 40; the 6 lowest-sounding become the space and Enter set.
+  cuts.sort((a, b) => a.clean - b.clean)
+  const kept = cuts.slice(0, 40)
+  const byLow = [...kept].sort((a, b) => b.low - a.low)
+  const heavy = byLow.slice(0, 6), normal = byLow.slice(6)
+
+  // Each cut as its own buffer, evened out by the loudness of its first 30 ms, with a 1 ms
+  // fade in and a 25 ms fade out so the cut points never click.
+  const target = kept.reduce((s, c) => s + c.loud, 0) / kept.length
+  const toBuffer = (c) => {
+    const n = c.end - c.start
+    const b = new AudioBuffer({ length: n, numberOfChannels: 1, sampleRate: sr })
+    const d = b.getChannelData(0), g = target / c.loud
+    const fi = Math.round(0.001 * sr), fo = Math.round(FADE * sr)
+    for (let i = 0; i < n; i++) {
+      let w = 1
+      if (i < fi) w = i / fi
+      if (i > n - fo) w = Math.min(w, (n - i) / fo)
+      d[i] = x[c.start + i] * g * w
+    }
+    return b
+  }
+  const heavyBuf = heavy.map(toBuffer), normalBuf = normal.map(toBuffer)
+
+  // ---- one press per keystroke ----
+  const ctx = new OfflineAudioContext(2, Math.ceil(SR * len), SR)
+  const bus = ctx.createGain(); bus.connect(ctx.destination)
+  const last = { heavy: -1, normal: -1 }
+  for (const p of presses) {
+    const big = p.key === ' ' || p.key === 'Enter'
+    const pool = big ? heavyBuf : normalBuf, which = big ? 'heavy' : 'normal'
+    let i = Math.floor(rnd() * pool.length)
+    if (pool.length > 1 && i === last[which]) i = (i + 1) % pool.length   // never the same press twice in a row
+    last[which] = i
+    const src = ctx.createBufferSource(); src.buffer = pool[i]
+    src.playbackRate.value = 0.98 + rnd() * 0.04                           // within ±2%
+    const g = ctx.createGain(); g.gain.value = Math.pow(10, ((rnd() * 2 - 1) * 1.5) / 20) * (big ? 1.15 : 1)
+    const pan = ctx.createStereoPanner(); pan.pan.value = (rnd() - 0.5) * 0.16
+    src.connect(g).connect(pan).connect(bus)
+    // The detected onset sits PRE seconds into the cut; it lands on the keystroke's time.
+    const when = p.t - PRE
+    if (when >= 0) src.start(when); else src.start(0, -when)
+  }
+  const buf = await ctx.startRendering()
+
+  // Normalise to a -14 dBFS peak: the clicks cut through the music, never on top of it.
+  const left = buf.getChannelData(0), right = buf.getChannelData(1)
+  let peak = 0
+  for (let i = 0; i < left.length; i++) peak = Math.max(peak, Math.abs(left[i]), Math.abs(right[i]))
+  const gain = peak > 0 ? Math.pow(10, -14 / 20) / peak : 0
+  for (let i = 0; i < left.length; i++) { left[i] *= gain; right[i] *= gain }
+  const info = { onsets: on.length, clean: cuts.length, kept: kept.length, heavy: heavy.length,
+    lengthsMs: [Math.min(...kept.map((c) => c.end - c.start)), Math.max(...kept.map((c) => c.end - c.start))].map((n) => Math.round(n / sr * 1000)) }
+  return { sr: SR, left, right, info }
+}
+</script>

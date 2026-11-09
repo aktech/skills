@@ -1,0 +1,43 @@
+---
+config:
+  look: handDrawn
+  theme: base
+  themeVariables:
+    fontFamily: "Fira Sans, sans-serif"
+    fontSize: "17px"
+    background: "#F5F3FF"
+    primaryColor: "#E0E7FF"
+    primaryBorderColor: "#4338CA"
+    primaryTextColor: "#312E81"
+    lineColor: "#7C3AED"
+    clusterBkg: "#FAF9FF"
+    clusterBorder: "#C4B5FD"
+    edgeLabelBackground: "#F5F3FF"
+  flowchart:
+    curve: basis
+    padding: 18
+---
+flowchart LR
+  client{{"Client<br/>same token as before"}}
+  proxy["<b>Proxy</b><br/>example.com/channels<br/>checks the token"]
+  new["<b>New service</b><br/>channel-a<br/>channel-b"]
+  old[("<b>Old service</b><br/>legacy-a<br/>legacy-b")]
+  no["anything else<br/><b>refused</b>"]
+
+  client --> proxy
+  proxy -- "new channels" --> new
+  proxy -. "old channels<br/>until removed" .-> old
+  proxy -.-> no
+
+  classDef box fill:#E0E7FF,stroke:#4338CA,color:#312E81
+  classDef ext fill:#FEF3C7,stroke:#B45309,color:#78350F,stroke-dasharray:6 4
+  classDef chan fill:#EDE9FE,stroke:#7C3AED,color:#4C1D95
+  classDef good fill:#ECFDF5,stroke:#059669,color:#064E3B
+  classDef store fill:#E0F2FE,stroke:#0369A1,color:#0C4A6E
+  classDef old fill:#F3F4F6,stroke:#6B7280,color:#374151,stroke-dasharray:6 4
+  classDef refused fill:#FEE2E2,stroke:#B91C1C,color:#7F1D1D
+  class client ext
+  class proxy box
+  class new chan
+  class old old
+  class no refused
